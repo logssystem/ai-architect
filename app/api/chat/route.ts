@@ -1,4 +1,4 @@
-import { createAnthropic } from '@ai-sdk/anthropic'
+import { createGroq } from '@ai-sdk/groq'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { projects, messages as messagesTable } from '@/lib/db/schema'
@@ -7,7 +7,7 @@ import { convertToModelMessages, streamText, type UIMessage } from 'ai'
 import { and, eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
 
-const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
 
 export const maxDuration = 60
 
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   }
 
   const result = streamText({
-    model: anthropic('claude-haiku-4-5-20251001'),
+    model: groq('llama-3.3-70b-versatile'),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     onFinish: async ({ text }) => {
