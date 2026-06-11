@@ -66,6 +66,7 @@ export async function POST(req: Request) {
     model: groq('llama-3.3-70b-versatile'),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
+    maxTokens: 4096,
     onFinish: async ({ text }) => {
       // Persiste a resposta do assistente e atualiza a etapa atual da sessão.
       await db

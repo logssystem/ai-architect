@@ -1,13 +1,19 @@
 'use client'
 
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/code-block'
 import { Mermaid } from '@/components/mermaid'
 
-// Renderiza o conteúdo markdown produzido pela IA: títulos, listas, tabelas,
-// blocos de código (com highlight) e diagramas Mermaid.
+const TRUNCATE_CHARS = 4000
+
 export function MessageContent({ content }: { content: string }) {
+  const isLong = content.length > TRUNCATE_CHARS
+  const [expanded, setExpanded] = useState(!isLong)
+
+  const visible = expanded ? content : content.slice(0, TRUNCATE_CHARS)
+
   return (
     <div className="prose-chat">
       <ReactMarkdown
@@ -36,7 +42,6 @@ export function MessageContent({ content }: { content: string }) {
 
             return <CodeBlock code={raw} language={lang || 'text'} />
           },
-          // Evita que o react-markdown envolva nossos blocos em <pre>.
           pre({ children }) {
             return <>{children}</>
           },
@@ -77,8 +82,18 @@ export function MessageContent({ content }: { content: string }) {
           },
         }}
       >
-        {content}
+        {visible}
       </ReactMarkdown>
+
+      {isLong && !expanded && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="mt-3 text-xs text-primary underline underline-offset-2 hover:text-primary/80"
+        >
+          Ver resposta completa ({Math.round(content.length / 1000)}k caracteres)
+        </button>
+      )}
     </div>
   )
 }
