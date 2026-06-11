@@ -6,17 +6,34 @@ import { headers } from 'next/headers'
 
 export const maxDuration = 30
 
-// Extrai blocos de código do markdown: ```lang\ncode\n```
-function extractCodeBlocks(content: string): Array<{ lang: string; code: string }> {
-  const blocks: Array<{ lang: string; code: string }> = []
-  const regex = /```(\w+)?\n([\s\S]*?)```/g
+// Extrai blocos de código do markdown, tentando detectar o nome real do arquivo
+function extractCodeBlocks(content: string): Array<{ lang: string; code: string; filename?: string }> {
+  const blocks: Array<{ lang: string; code: string; filename?: string }> = []
+  const fencePattern = /```(\w+)?\n([\s\S]*?)```/g
   let match
-  while ((match = regex.exec(content)) !== null) {
+
+  while ((match = fencePattern.exec(content)) !== null) {
     const lang = (match[1] || 'txt').toLowerCase()
-    if (lang !== 'mermaid') {
-      blocks.push({ lang, code: match[2].trim() })
+    const code = match[2].trim()
+    if (lang === 'mermaid') continue
+
+    let filename: string | undefined
+
+    // 1. Contexto antes do bloco: procura por nome de arquivo nas últimas 200 chars
+    const before = content.slice(Math.max(0, match.index - 200), match.index)
+    const ctxMatch = before.match(/[`*_]{0,3}([a-zA-Z0-9_\-]+\.[a-zA-Z]{1,10})[`*_]{0,3}\s*(?:[:–-])?\s*$/)
+    if (ctxMatch) filename = ctxMatch[1]
+
+    // 2. Primeira linha do bloco como comentário: // app.js, # app.py, -- schema.sql
+    if (!filename) {
+      const firstLine = code.split('\n')[0].trim()
+      const commentMatch = firstLine.match(/^(?:\/\/|#|--|\/\*)\s*(?:file(?:name)?:?\s*)?([a-zA-Z0-9_\-./]+\.[a-zA-Z]{1,10})/)
+      if (commentMatch) filename = commentMatch[1]
     }
+
+    blocks.push({ lang, code, filename })
   }
+
   return blocks
 }
 
@@ -25,7 +42,9 @@ function langToExt(lang: string): string {
     javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts',
     python: 'py', py: 'py', sql: 'sql', html: 'html', css: 'css',
     json: 'json', yaml: 'yml', yml: 'yml', bash: 'sh', sh: 'sh',
-    dockerfile: 'Dockerfile', txt: 'txt',
+    shell: 'sh', dockerfile: 'Dockerfile', txt: 'txt',
+    markdown: 'md', md: 'md', makefile: 'Makefile', env: 'env',
+    prisma: 'prisma', graphql: 'graphql', toml: 'toml', xml: 'xml',
   }
   return map[lang] || lang
 }
@@ -150,14 +169,41 @@ export async function GET(req: Request) {
   const blocks = extractCodeBlocks(assistantContent)
 
   const files: Array<{ name: string; content: string }> = []
-
-  // Conta por extensão para nomear arquivos únicos
+  const usedNames = new Set<string>()
   const extCount: Record<string, number> = {}
+
   for (const block of blocks) {
     const ext = langToExt(block.lang)
-    extCount[ext] = (extCount[ext] || 0) + 1
-    const idx = extCount[ext]
-    const name = ext === 'Dockerfile' ? 'Dockerfile' : `arquivo_${idx}.${ext}`
+    const isSpecial = ext === 'Dockerfile' || ext === 'Makefile'
+
+    let name: string
+
+    if (block.filename) {
+      // Sanitiza o nome extraído do contexto
+      const clean = block.filename.replace(/[^a-zA-Z0-9_\-./]/g, '_')
+      name = clean
+      // Resolve colisão de nomes
+      if (usedNames.has(name)) {
+        const dotIdx = name.lastIndexOf('.')
+        const base = dotIdx >= 0 ? name.slice(0, dotIdx) : name
+        const fileExt = dotIdx >= 0 ? name.slice(dotIdx) : ''
+        let i = 2
+        while (usedNames.has(`${base}_${i}${fileExt}`)) i++
+        name = `${base}_${i}${fileExt}`
+      }
+    } else if (isSpecial) {
+      name = ext
+      if (usedNames.has(name)) {
+        let i = 2
+        while (usedNames.has(`${ext}_${i}`)) i++
+        name = `${ext}_${i}`
+      }
+    } else {
+      extCount[ext] = (extCount[ext] || 0) + 1
+      name = `arquivo_${extCount[ext]}.${ext}`
+    }
+
+    usedNames.add(name)
     files.push({ name, content: block.code })
   }
 

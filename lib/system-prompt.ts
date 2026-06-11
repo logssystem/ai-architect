@@ -331,6 +331,7 @@ Automações pré-mapeadas: chamada recebida → consulta CRM → abre ficha; ch
 - Tratamento de erro em todo endpoint
 - Logs estruturados (JSON) em produção
 - Comentários explicando o *porquê*, não o *o quê*
+- **OBRIGATÓRIO:** A primeira linha de cada bloco de código deve ser um comentário com o nome exato do arquivo. Exemplos: \`// app.js\`, \`// routes/chamados.js\`, \`# models/usuario.py\`, \`-- migrations/001_create_tables.sql\`. Isso é essencial para o export funcionar corretamente.
 
 ---
 
