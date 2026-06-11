@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, type UIMessage } from 'ai'
-import { ArrowUp, Loader2 } from 'lucide-react'
+import { ArrowUp, Download, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { MessageContent } from '@/components/message-content'
@@ -184,6 +184,19 @@ export function Chat({
           Etapas da sessão
         </h3>
         <StepProgress currentStep={currentStep} />
+
+        {messages.length > 0 && (
+          <div className="mt-4 border-t border-border pt-4">
+            <a
+              href={`/api/export?projectId=${projectId}`}
+              download
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <Download className="size-3.5" />
+              Exportar arquivos (.zip)
+            </a>
+          </div>
+        )}
       </aside>
     </div>
   )

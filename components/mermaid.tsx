@@ -47,7 +47,7 @@ export function Mermaid({ chart }: { chart: string }) {
   }, [chart, id])
 
   if (error) {
-    // Fallback: mostra o código bruto do diagrama se a renderização falhar.
+    // Fallback silencioso: mostra o código como texto sem erro visual.
     return (
       <pre className="overflow-x-auto rounded-lg border border-border bg-secondary/50 p-4 text-xs text-muted-foreground">
         <code>{chart}</code>
