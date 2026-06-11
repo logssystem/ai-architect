@@ -1,14 +1,11 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 
-// Renderiza um diagrama Mermaid. O mermaid é carregado dinamicamente no cliente
-// para não pesar no bundle inicial e por depender de APIs de browser.
 export function Mermaid({ chart }: { chart: string }) {
   const id = useId().replace(/:/g, '')
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [error, setError] = useState<string | null>(null)
   const [svg, setSvg] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -19,7 +16,8 @@ export function Mermaid({ chart }: { chart: string }) {
         mermaid.initialize({
           startOnLoad: false,
           theme: 'dark',
-          securityLevel: 'strict',
+          securityLevel: 'loose',
+          suppressErrorRendering: true,
           themeVariables: {
             background: 'transparent',
             primaryColor: '#1c2230',
@@ -28,26 +26,27 @@ export function Mermaid({ chart }: { chart: string }) {
             fontFamily: 'var(--font-mono)',
           },
         })
-        const { svg } = await mermaid.render(`mermaid-${id}`, chart.trim())
+
+        // Valida antes de renderizar para evitar erro visual do Mermaid
+        await mermaid.parse(chart.trim())
+
+        const result = await mermaid.render(`mermaid-${id}`, chart.trim())
+        if (!cancelled) setSvg(result.svg)
+      } catch {
         if (!cancelled) {
-          setSvg(svg)
-          setError(null)
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Erro ao renderizar diagrama')
+          setFailed(true)
+          // Remove qualquer elemento de erro que o Mermaid possa ter injetado no DOM
+          document.getElementById(`d${id}`)?.remove()
+          document.getElementById(`mermaid-${id}`)?.remove()
         }
       }
     }
 
     render()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [chart, id])
 
-  if (error) {
-    // Fallback silencioso: mostra o código como texto sem erro visual.
+  if (failed) {
     return (
       <pre className="overflow-x-auto rounded-lg border border-border bg-secondary/50 p-4 text-xs text-muted-foreground">
         <code>{chart}</code>
@@ -55,18 +54,18 @@ export function Mermaid({ chart }: { chart: string }) {
     )
   }
 
+  if (!svg) {
+    return (
+      <div className="my-2 flex justify-center rounded-lg border border-border bg-secondary/30 p-4">
+        <span className="text-xs text-muted-foreground">Renderizando diagrama...</span>
+      </div>
+    )
+  }
+
   return (
     <div
-      ref={containerRef}
       className="my-2 flex justify-center overflow-x-auto rounded-lg border border-border bg-secondary/30 p-4"
-      // eslint-disable-next-line react/no-danger
-      dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}
-    >
-      {!svg ? (
-        <span className="text-xs text-muted-foreground">
-          Renderizando diagrama...
-        </span>
-      ) : null}
-    </div>
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
   )
 }

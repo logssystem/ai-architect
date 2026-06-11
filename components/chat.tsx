@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, type UIMessage } from 'ai'
-import { ArrowUp, Download, Loader2 } from 'lucide-react'
+import { ArrowUp, Download, ImagePlus, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { MessageContent } from '@/components/message-content'
@@ -38,7 +38,10 @@ export function Chat({
 }) {
   const router = useRouter()
   const [input, setInput] = useState('')
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageBase64, setImageBase64] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const { messages, sendMessage, status } = useChat({
     messages: initialMessages,
@@ -49,15 +52,12 @@ export function Chat({
       }),
     }),
     onFinish: () => {
-      // Atualiza dados do servidor (título/etapa da sessão na sidebar).
       router.refresh()
     },
   })
 
   const isLoading = status === 'streaming' || status === 'submitted'
 
-  // Etapa atual: deriva da última mensagem do assistente, com fallback no valor
-  // persistido.
   const currentStep = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'assistant') {
@@ -75,9 +75,33 @@ export function Chat({
     })
   }, [messages])
 
+  const handleImage = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const result = e.target?.result as string
+      setImagePreview(result)
+      setImageBase64(result)
+    }
+    reader.readAsDataURL(file)
+  }
+
   const submit = (text: string) => {
-    if (!text.trim() || isLoading) return
-    sendMessage({ text })
+    if ((!text.trim() && !imageBase64) || isLoading) return
+
+    if (imageBase64) {
+      // Envia com imagem
+      const imageText = text.trim()
+        ? text
+        : 'Analise esta imagem e me ajude a criar um sistema baseado nela.'
+      sendMessage({
+        text: imageText,
+        files: [{ type: 'image', data: imageBase64 }],
+      } as Parameters<typeof sendMessage>[0])
+      setImagePreview(null)
+      setImageBase64(null)
+    } else {
+      sendMessage({ text })
+    }
     setInput('')
   }
 
@@ -136,6 +160,29 @@ export function Chat({
         {/* Caixa de entrada */}
         <div className="border-t border-border bg-background/80 backdrop-blur">
           <div className="mx-auto w-full max-w-3xl px-4 py-3">
+            {/* Preview da imagem */}
+            {imagePreview && (
+              <div className="mb-2 flex items-start gap-2">
+                <div className="relative">
+                  <img
+                    src={imagePreview}
+                    alt="preview"
+                    className="h-20 w-20 rounded-lg border border-border object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setImagePreview(null); setImageBase64(null) }}
+                    className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-destructive text-white"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                </div>
+                <span className="text-xs text-muted-foreground pt-1">
+                  Imagem anexada — descreva o que quer ou envie direto
+                </span>
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault()
@@ -143,6 +190,28 @@ export function Chat({
               }}
               className="relative flex items-end gap-2 rounded-xl border border-border bg-card p-2 focus-within:border-primary/50"
             >
+              {/* Botão de imagem */}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleImage(file)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={isLoading}
+                className="shrink-0 p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                aria-label="Anexar imagem"
+              >
+                <ImagePlus className="size-4" />
+              </button>
+
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -150,6 +219,13 @@ export function Chat({
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     submit(input)
+                  }
+                }}
+                onPaste={(e) => {
+                  const file = e.clipboardData.files[0]
+                  if (file?.type.startsWith('image/')) {
+                    e.preventDefault()
+                    handleImage(file)
                   }
                 }}
                 placeholder="Descreva o que você precisa, ou responda às perguntas..."
@@ -160,7 +236,7 @@ export function Chat({
               <Button
                 type="submit"
                 size="icon"
-                disabled={isLoading || !input.trim()}
+                disabled={isLoading || (!input.trim() && !imageBase64)}
                 className="size-9 shrink-0"
                 aria-label="Enviar mensagem"
               >
@@ -206,6 +282,13 @@ function Message({ message }: { message: UIMessage }) {
   const isUser = message.role === 'user'
   const text = getText(message)
 
+  // Verifica se há imagem na mensagem
+  const imagePart = message.parts?.find(
+    (p): p is { type: 'file'; mediaType: string; url: string } =>
+      p.type === 'file' && typeof (p as { mediaType?: string }).mediaType === 'string' &&
+      (p as { mediaType: string }).mediaType.startsWith('image/'),
+  )
+
   return (
     <div className={cn('flex gap-3', isUser && 'flex-row-reverse')}>
       <div
@@ -227,6 +310,13 @@ function Message({ message }: { message: UIMessage }) {
             : 'bg-card border border-border',
         )}
       >
+        {imagePart && (
+          <img
+            src={imagePart.url}
+            alt="imagem enviada"
+            className="mb-2 max-h-48 rounded-lg object-contain"
+          />
+        )}
         {isUser ? (
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>
         ) : (

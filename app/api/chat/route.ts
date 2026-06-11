@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   }
 
   const result = streamText({
-    model: groq('llama-3.3-70b-versatile'),
+    model: groq('meta-llama/llama-4-maverick-17b-128e-instruct'),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     onFinish: async ({ text }) => {
